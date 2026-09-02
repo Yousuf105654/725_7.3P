@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Live Poll - Vote</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="nav">
+      <a href="/">Vote</a>
+      <a href="/host.html">Host Dashboard</a>
+    </div>
+
+    <h1>Live Poll</h1>
+
+    <div class="status-bar" id="connectionStatus">Connecting...</div>
+
+    <div id="pollArea">
+      <p class="empty">Waiting for the host to start a poll...</p>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const connectionStatus = document.getElementById('connectionStatus');
+    const pollArea = document.getElementById('pollArea');
+
+    let hasVoted = false;
+    let myVoteIndex = null;
+
+    socket.on('connect', () => {
+      connectionStatus.textContent = 'Connected';
+    });
+    socket.on('disconnect', () => {
+      connectionStatus.textContent = 'Disconnected';
+    });
+
+    socket.on('voteAccepted', ({ optionIndex }) => {
+      hasVoted = true;
+      myVoteIndex = optionIndex;
+    });
+
+    socket.on('pollState', (poll) => {
+      renderPoll(poll);
+    });
+
+    function renderPoll(poll) {
+      if (!poll) {
+        pollArea.innerHTML = '<p class="empty">Waiting for the host to start a poll...</p>';
+        hasVoted = false;
+        myVoteIndex = null;
+        return;
+      }
+
+      const canVote = poll.isOpen && !hasVoted;
+
+      const optionsHtml = poll.options.map((opt, i) => {
+        const selectedClass = myVoteIndex === i ? 'selected' : '';
+        if (canVote) {
+          return `<button class="vote-btn ${selectedClass}" onclick="vote(${i})">${escapeHtml(opt.text)}</button>`;
+        }
+        return `
+          <div class="option-row">
+            <div class="option-label">
+              <span>${escapeHtml(opt.text)}${myVoteIndex === i ? ' (your vote)' : ''}</span>
+              <span>${opt.votes} vote${opt.votes === 1 ? '' : 's'} (${opt.percent}%)</span>
+            </div>
+            <div class="bar-bg">
+              <div class="bar-fill" style="width:${opt.percent}%"></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      pollArea.innerHTML = `
+        <div class="poll-card">
+          <h2>${escapeHtml(poll.question)}</h2>
+          ${!poll.isOpen ? '<p class="closed-tag">Voting closed</p>' : ''}
+          ${hasVoted && poll.isOpen ? '<p>Thanks for voting! Results update live below.</p>' : ''}
+          ${optionsHtml}
+          <p>Total votes: ${poll.totalVotes}</p>
+        </div>
+      `;
+    }
+
+    function vote(optionIndex) {
+      socket.emit('castVote', { optionIndex });
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Live Poll - Host</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="nav">
+      <a href="/">Vote</a>
+      <a href="/host.html">Host Dashboard</a>
+    </div>
+
+    <h1>Host Dashboard</h1>
+
+    <div class="status-bar" id="connectionStatus">Connecting...</div>
+
+    <form id="pollForm">
+      <label for="question">Question</label>
+      <input type="text" id="question" placeholder="e.g. What's your favourite framework?" required />
+
+      <label for="option1">Option 1</label>
+      <input type="text" id="option1" placeholder="e.g. Express" required />
+
+      <label for="option2">Option 2</label>
+      <input type="text" id="option2" placeholder="e.g. Django" required />
+
+      <label for="option3">Option 3 (optional)</label>
+      <input type="text" id="option3" placeholder="e.g. Flask" />
+
+      <label for="option4">Option 4 (optional)</label>
+      <input type="text" id="option4" placeholder="e.g. Spring Boot" />
+
+      <button type="submit">Launch Poll</button>
+    </form>
+
+    <div id="pollArea">
+      <p class="empty">No poll running yet.</p>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const connectionStatus = document.getElementById('connectionStatus');
+    const pollArea = document.getElementById('pollArea');
+    const pollForm = document.getElementById('pollForm');
+
+    socket.on('connect', () => {
+      connectionStatus.textContent = 'Connected';
+    });
+    socket.on('disconnect', () => {
+      connectionStatus.textContent = 'Disconnected';
+    });
+
+    socket.on('pollState', renderPoll);
+
+    pollForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const question = document.getElementById('question').value;
+      const options = ['option1', 'option2', 'option3', 'option4']
+        .map((id) => document.getElementById(id).value)
+        .filter((v) => v.trim() !== '');
+
+      socket.emit('createPoll', { question, options });
+    });
+
+    function renderPoll(poll) {
+      if (!poll) {
+        pollArea.innerHTML = '<p class="empty">No poll running yet.</p>';
+        return;
+      }
+
+      const optionsHtml = poll.options.map((opt) => `
+        <div class="option-row">
+          <div class="option-label">
+            <span>${escapeHtml(opt.text)}</span>
+            <span>${opt.votes} vote${opt.votes === 1 ? '' : 's'} (${opt.percent}%)</span>
+          </div>
+          <div class="bar-bg">
+            <div class="bar-fill" style="width:${opt.percent}%"></div>
+          </div>
+        </div>
+      `).join('');
+
+      pollArea.innerHTML = `
+        <div class="poll-card">
+          <h2>${escapeHtml(poll.question)}</h2>
+          ${!poll.isOpen ? '<p class="closed-tag">Voting closed</p>' : ''}
+          ${optionsHtml}
+          <p>Total votes: ${poll.totalVotes}</p>
+          ${poll.isOpen ? '<button class="close-btn" onclick="closePoll()">Close Voting</button>' : ''}
+        </div>
+      `;
+    }
+
+    function closePoll() {
+      socket.emit('closePoll');
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>
